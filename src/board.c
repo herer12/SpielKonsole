@@ -1,23 +1,18 @@
-#define LEFT_BTN   2
-#define RIGHT_BTN  3
-#define DOWN_BTN   4
-#define UP_BTN     5
-#define A_BTN      6
-#define B_BTN      7
-#define HOME_BTN   8
-static const uint8_t pinSteuerkreuz[] = {LEFT_BTN, RIGHT_BTN, DOWN_BTN, UP_BTN};
-static const uint8_t numberOfPin = sizeof(pinSteuerkreuz) / sizeof(pinSteuerkreuz[0]);
-#define BUTTON_ACTIVE_LEVEL 0  // 0 für active-low, 1 für active-high  Der Rest ist schon gecodet in c mit platformio hier ist die Spielinterne Board logik #include "board.h"
+#include "board.h"
 #include <stdio.h>  // für printf()
 #include  <string.h>
+#include "display.h"
 #define TAG "BOARD"
 
 uint8_t board[BOARD_BYTES];
 
-// Hilfsfunktion: Index berechnen (0–63)
-static inline uint8_t board_index(uint8_t x, uint8_t y) {
-    return y * BOARD_SIZE + x;
+
+static inline uint8_t board_index(int x, int y) {
+    // Reihenfolge: n = y * BOARD_SIZE + x
+    return (uint8_t)(y * BOARD_SIZE + x);
 }
+
+
 
 // Setzt Feldwert (2 Bits)
 void board_set( int x, int y, uint8_t value) {
@@ -30,6 +25,7 @@ void board_set( int x, int y, uint8_t value) {
 
     board[byte_index] &= ~(0x3 << bit_offset);        // alte Bits löschen
     board[byte_index] |=  (value & 0x3) << bit_offset; // neue Bits setzen
+    display_mark_changed();
 }
 
 // Liest Feldwert
@@ -46,6 +42,7 @@ uint8_t board_get(int x, int y) {
 // Setzt das ganze Brett auf 0
 void board_clear() {
     memset(board, 0, sizeof(board));
+    display_clear();
 }
 
 //Nachdem der Code funktioniert löschen

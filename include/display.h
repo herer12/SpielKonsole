@@ -6,6 +6,7 @@
 
 #define MATRIX_W 8
 #define MATRIX_H 8
+
 #define DISPLAY_I2C_PORT I2C_NUM_0
 #define DISPLAY_I2C_FREQ 400000
 #define DISPLAY_ADDR 0x74  // anpassbar
