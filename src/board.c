@@ -42,7 +42,6 @@ uint8_t board_get(int x, int y) {
 // Setzt das ganze Brett auf 0
 void board_clear() {
     memset(board, 0, sizeof(board));
-    display_clear();
 }
 
 //Nachdem der Code funktioniert löschen

@@ -71,18 +71,18 @@ void app_main(void) {
 
     renderer_init();
 
-    i2c_scan();
+    //i2c_scan();
 
     //smiley_animation();
 
     //Display Task starten
-    //xTaskCreate(display_task, "display_task", 2048, NULL, 5, NULL);
+    xTaskCreate(renderer_task, "display_task", 2048, NULL, 5, NULL);
 
 
 
     // Button-Task starten
     //17% Stack mehr als du brauchst
-    //xTaskCreate(button_task, "button_task", 2000, NULL, 7, NULL);
+    xTaskCreate(button_task, "button_task", 2000, NULL, 7, NULL);
 
     /*
     while (1) {
@@ -158,6 +158,7 @@ void handle_home_button() {
     reset_game();
 }
 
+/*
 // === Main menu Animation ===
 
 // Gelbes Gesicht zeichnen
@@ -228,3 +229,4 @@ void smiley_animation() {
         vTaskDelay(pdMS_TO_TICKS(1500));
     }
 }
+*/

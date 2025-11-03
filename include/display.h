@@ -25,7 +25,6 @@ void display_mark_changed();
 void display_init();
 void display_clear();
 void display_set_pixel(uint8_t x, uint8_t y, uint8_t r, uint8_t g, uint8_t b);
-void display_update();
-void display_task();
+void display_update_board();
 
 #endif //SLP_DISPLAY_H
