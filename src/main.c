@@ -1,13 +1,10 @@
 #include <stdio.h>
 #include <string.h>
-#include "display.h"
 #include "game_conect4.h"
 #include "driver/i2c.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "render.h"
-#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <portmacro.h>
 #define TAG "Main menü"
@@ -48,37 +45,16 @@ void handle_home_button();
 void button_handler_different_games(uint8_t pin);
 void smiley_animation();
 
-void i2c_scan() {
-    printf("I2C scan:\n");
-    for (uint8_t addr = 1; addr < 127; addr++) {
-        if (i2c_master_write_to_device(I2C_NUM_0, addr, NULL, 0, 10 / portTICK_PERIOD_MS) == ESP_OK) {
-            printf("Found device at 0x%02X\n", addr);
-        }
-    }
-}
-
-
 // ============================================================================
 // MAIN LOOP
 // ============================================================================
 
 void app_main(void) {
-    ESP_LOGI(TAG, "Startet Main");
-
     buttons_init();
 
     logic_connect4_init();
 
-    renderer_init();
-
-    //i2c_scan();
-
     //smiley_animation();
-
-    //Display Task starten
-    xTaskCreate(renderer_task, "display_task", 2048, NULL, 5, NULL);
-
-
 
     // Button-Task starten
     //17% Stack mehr als du brauchst
@@ -101,7 +77,6 @@ void app_main(void) {
 // ============================================================================
 // BUTTONS
 // ============================================================================
-
 void buttons_init() {
     // GPIOs konfigurieren
     gpio_config_t io_conf = {
@@ -115,8 +90,6 @@ void buttons_init() {
         io_conf.pin_bit_mask = 1ULL << pinSteuerkreuz[i];
         gpio_config(&io_conf);
     }
-
-
 }
 
 void button_task() {
@@ -127,7 +100,7 @@ void button_task() {
         for (int i = 0; i < NUMBER_OF_PIN; i++) {
             const int pin = pinSteuerkreuz[i];
 
-            if ( gpio_get_level(pin) == BUTTON_ACTIVE_LEVEL && (now - last_press_times[i] > DEBOUNCE_MS)) {
+            if (gpio_get_level(pin) == BUTTON_ACTIVE_LEVEL && (now - last_press_times[i] > DEBOUNCE_MS)) {
                 last_press_times[i] = now;
                 ESP_LOGI(TAG, "Button %d pressed", pin);
                 button_handler_different_games(pin);
@@ -139,21 +112,20 @@ void button_task() {
     }
 }
 
-
 void button_handler_different_games(uint8_t pin) {
     if (current_game == GAME_CONNECT4) {
         switch (pin) {
             case LEFT_BTN: move_left(); break;
-                case RIGHT_BTN: move_right(); break;
-                case DOWN_BTN: drop_piece(); break;
-                case UP_BTN: reset_game(); break;
+            case RIGHT_BTN: move_right(); break;
+            case DOWN_BTN: drop_piece(); break;
+            case UP_BTN: reset_game(); break;
             default: break;
         }
 
     }
 }
 void handle_home_button() {
-    smiley_animation();
+    //smiley_animation();
     current_game = (current_game + 1) % GAME_COUNT;
     reset_game();
 }

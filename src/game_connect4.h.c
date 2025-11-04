@@ -5,8 +5,6 @@
 #include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include <display.h>
-
 #include "board.h"
 #include "game_conect4.h"
 
@@ -14,25 +12,18 @@
 #define COLS 7
 #define TAG "game_connect4"
 
-static bool game_over = false;
-static uint8_t col = 3;
-static uint8_t player = 1;
-
-static bool drop_piece_in_col(uint8_t c);
-static int ai_choose_column();
-static bool check_win_for_player(uint8_t test_player);
-
+bool singleplayer = true;
+uint8_t ai_level= 1 ; //1 leicht, 2 Forgeschritten 3 Schwer(perfektes Spiel)
+bool game_over = false;
+uint8_t col = 3;
+uint8_t player = 1;
 
 // ------------------------------------------------------------
 // Initialisierung
 // ------------------------------------------------------------
 void logic_connect4_init() {
-    board_clear();
     srand(time(NULL));
-    player = 1;
-    col = 3;
-    game_over = false;
-    board_set(col, 0, player);
+    reset_game();
 }
 
 // ------------------------------------------------------------
@@ -68,11 +59,11 @@ void drop_piece() {
         return;
     }
 
-    if (SINGLEPLAYER == 1) {
+    if (singleplayer) {
         // KI-Zug
         player = 2;
         int ai_col = ai_choose_column();
-        ESP_LOGI(TAG, "KI (Level %d) wählt Spalte %d", AI_LEVEL, ai_col);
+        ESP_LOGI(TAG, "KI (Level %d) wählt Spalte %d", ai_level, ai_col);
         vTaskDelay(pdMS_TO_TICKS(300));
         drop_piece_in_col(ai_col);
 
@@ -110,7 +101,7 @@ void reset_game() {
 // ------------------------------------------------------------
 // Hilfsfunktionen
 // ------------------------------------------------------------
-static bool drop_piece_in_col(uint8_t c) {
+bool drop_piece_in_col(uint8_t c) {
     for (int y = ROWS - 1; y >= 1; y--) {
         if (board_get(c, y) == 0) {
             board_set(c, y, player);
@@ -123,19 +114,21 @@ static bool drop_piece_in_col(uint8_t c) {
 
 // ------------------------------------------------------------
 // Gewinnprüfung für beliebigen Spieler
-static bool check_win_for_player(uint8_t test_player) {
-    const int dirs[4][2] = {
+bool check_win_for_player(uint8_t test_player) {
+    const int directionsOfWin[4][2] = {
         {1,0}, {0,1}, {1,1}, {-1,1}
     };
-    for(int d=0; d<4; d++){
-        int dx = dirs[d][0], dy = dirs[d][1];
+    for(int numberDirections=0; numberDirections<4; numberDirections++){
+        uint8_t directionOfWinForXDirection = directionsOfWin[numberDirections][0];
+        uint8_t directionOfWinForYDirection = directionsOfWin[numberDirections][1];
         for(int x=0; x<COLS; x++){
             for(int y=1; y<ROWS; y++){
                 int count=0;
                 for(int k=0; k<4; k++){
-                    int nx=x+k*dx, ny=y+k*dy;
-                    if(nx<0 || nx>=COLS || ny<1 || ny>=ROWS) break;
-                    if(board_get(nx,ny)==test_player) count++;
+                    uint8_t nextX=x+k*directionOfWinForXDirection;
+                    uint8_t nextY=y+k*directionOfWinForYDirection;
+                    if(nextX<0 || nextX>=COLS || nextY<1 || nextY>=ROWS) break;
+                    if(board_get(nextX,nextY)==test_player) count++;
                     else break;
                 }
                 if(count==4) return true;
@@ -184,36 +177,22 @@ int ai_choose_column() {
     if(valid_count==0){ game_over=true; return 0; }
 
     //
-    if(AI_LEVEL <=3){
-        // Level 3: Gewinnchance prüfen
-        if(AI_LEVEL>=3){
+    if(ai_level ==1){
+        // Level 1: Gewinnchance prüfen, Blockieren Spieler, Zufall
+
             for(int i=0;i<valid_count;i++){
                 int c=valid_cols[i];
                 for(int y=ROWS-1;y>=1;y--){
                     if(board_get(c,y)==0){
                         board_set(c,y,2);
                         if(check_win_for_player(2)){ board_set(c,y,0); return c; }
-                        board_set(c,y,0);
-                        break;
-                    }
-                }
-            }
-        }
-        // Level 2: Blockieren Spieler
-        if(AI_LEVEL>=2){
-            for(int i=0;i<valid_count;i++){
-                int c=valid_cols[i];
-                for(int y=ROWS-1;y>=1;y--){
-                    if(board_get(c,y)==0){
-                        board_set(c,y,1);
                         if(check_win_for_player(1)){ board_set(c,y,0); return c; }
                         board_set(c,y,0);
                         break;
                     }
                 }
             }
-        }
-        // Leicht: Zufall
+        // Leicht:
         return valid_cols[rand() % valid_count];
     }
 
@@ -224,7 +203,7 @@ int ai_choose_column() {
         for(int x=0;x<COLS;x++)
             temp_board[y][x] = board_get(x,y);
 
-    int depth = (AI_LEVEL==4) ? 3 : 6;
+    int depth = (ai_level==2) ? 3 : 6;
     for(int i=0;i<valid_count;i++){
         int c = valid_cols[i];
         int r=-1;
