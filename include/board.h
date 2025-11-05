@@ -22,4 +22,6 @@ void board_clear();
 // Gibt das Brett in der Konsole aus (nur zum Debuggen)
 void board_print();
 
+uint8_t* get_Board();
+
 #endif

@@ -46,6 +46,10 @@ void board_clear() {
     memset(board, 0, sizeof(board));
 }
 
+uint8_t* get_Board(void) {
+    return board;
+}
+
 //Nachdem der Code funktioniert löschen
 // Gibt Brett im Terminal aus (Debug)
 void board_print() {
