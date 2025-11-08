@@ -8,7 +8,7 @@
 #define BOARD_FIELDS (BOARD_SIZE * BOARD_SIZE)  // 64
 #define BOARD_BYTES (BOARD_FIELDS / 4)          // 16 Bytes (2 Bits pro Feld)
 
-
+extern uint8_t board[BOARD_BYTES];
 
 // Setzt ein Feld (0–3) an Position (x, y)
 void board_set( int x, int y, uint8_t value);

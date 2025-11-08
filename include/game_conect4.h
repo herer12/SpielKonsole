@@ -15,6 +15,7 @@ bool check_win();
 bool drop_piece_in_col(uint8_t c);
 int ai_choose_column();
 bool check_win_for_player(uint8_t test_player);
+void set_Data(bool singleplayerMode, uint8_t kiLevel);
 
 
 #endif // GAME_CONNECT4_H

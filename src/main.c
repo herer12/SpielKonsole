@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <string.h>
+#include <board.h>
+#include <display.h>
 #include "game_conect4.h"
 #include "driver/i2c.h"
 #include "driver/gpio.h"
@@ -7,6 +9,7 @@
 #include "esp_timer.h"
 #include "freertos/task.h"
 #include <portmacro.h>
+#include <stdbool.h>
 #define TAG "Main menü"
 
 // ===== Hauptmenü =====
@@ -44,13 +47,122 @@ void button_task();
 void handle_home_button();
 void button_handler_different_games(uint8_t pin);
 void smiley_animation();
+void draw_smiley_for_level(uint8_t level);
+
+
+
+// Menü-Zustände
+typedef enum {MENU_MODE, MENU_AI} MenuState;
+static MenuState menu_state = MENU_MODE;
+
+static bool singleplayer = true;
+static uint8_t ai_level = 1; // 1=leicht, 2=mittel, 3=schwer
+static bool menu_done = false;
+
+// ============================================================================
+// Hilfsfunktionen: Smiley auf Board
+// ============================================================================
+
+void draw_smiley_for_ai(uint8_t level) {
+    board_clear();
+
+    uint8_t eye_color = 3; // rot Augen
+    uint8_t mouth_color = 1; // Mundfarbe
+
+    // Augen
+    board_set(2,2,eye_color);
+    board_set(5,2,eye_color);
+
+    // Mund je nach Schwierigkeitslevel
+    switch(level) {
+        case 1: // leicht → lächelnd
+            board_set(2,5,mouth_color);
+            board_set(3,6,mouth_color);
+            board_set(4,6,mouth_color);
+            board_set(5,5,mouth_color);
+            break;
+        case 2: // mittel → neutral
+            board_set(2,5,mouth_color);
+            board_set(3,5,mouth_color);
+            board_set(4,5,mouth_color);
+            board_set(5,5,mouth_color);
+            break;
+        case 3: // schwer → wütend
+            board_set(2,6,mouth_color);
+            board_set(3,5,mouth_color);
+            board_set(4,5,mouth_color);
+            board_set(5,6,mouth_color);
+            break;
+    }
+
+    board_print();
+}
+
+void draw_mode_selection(bool singleplayer) {
+    board_clear();
+
+    uint8_t color = singleplayer ? 2 : 3; // Grün = Singleplayer (C), Rot = Multiplayer (H)
+
+    if (singleplayer) {
+        // --- Buchstabe C ---
+        for (int x = 2; x <= 5; x++) board_set(x, 2, color); // obere Linie
+        for (int x = 2; x <= 5; x++) board_set(x, 6, color); // untere Linie
+        for (int y = 3; y <= 5; y++) board_set(2, y, color); // linke Linie
+    } else {
+        // --- Buchstabe H ---
+        for (int y = 2; y <= 6; y++) board_set(2, y, color); // linke Säule
+        for (int y = 2; y <= 6; y++) board_set(5, y, color); // rechte Säule
+        for (int x = 2; x <= 5; x++) board_set(x, 4, color); // mittlere Querlinie
+    }
+
+    board_print();
+}
+
+
+// ============================================================================
+// Buttons auswerten
+// ============================================================================
+
+void menu_handle_button(uint8_t pin) {
+    int64_t now = esp_timer_get_time()/1000; // ms
+    if(now - last_press_times[pin] < DEBOUNCE_MS) return;
+    last_press_times[pin] = now;
+
+    if(menu_state == MENU_MODE){
+        if(pin == LEFT_BTN || pin == RIGHT_BTN) singleplayer = !singleplayer;
+        if(pin == DOWN_BTN) menu_state = MENU_AI; // Weiter zu AI-Level
+        draw_mode_selection(singleplayer);
+    } else if(menu_state == MENU_AI){
+        if (!singleplayer)return;
+        if(pin == LEFT_BTN && ai_level>1) ai_level--;
+        if(pin == RIGHT_BTN && ai_level<3) ai_level++;
+        if(pin == DOWN_BTN) menu_done = true; // Menü fertig
+        draw_smiley_for_ai(ai_level);
+    }
+}
+
+// ============================================================================
+// Task zur Menüsteuerung
+// ============================================================================
+
+void menu_task(void *pvParameters){
+    draw_mode_selection(singleplayer); // erstes Menü anzeigen
+
+    while(!menu_done){
+        // Polling alle 50ms
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    set_Data(singleplayer,ai_level);
+    board_clear();
+    ESP_LOGI(TAG,"Menü beendet. Singleplayer=%b, AI-Level=%d", singleplayer, ai_level);
+    vTaskDelete(NULL);
+}
 
 // ============================================================================
 // MAIN LOOP
 // ============================================================================
 
 void app_main(void) {
-    buttons_init();
 
     logic_connect4_init();
 
@@ -59,6 +171,11 @@ void app_main(void) {
     // Button-Task starten
     //17% Stack mehr als du brauchst
     xTaskCreate(button_task, "button_task", 2000, NULL, 7, NULL);
+
+    xTaskCreate(menu_task,"menu_task",4000,NULL,5,NULL);
+
+    xTaskCreate(display_task, "taskDisplay", 4000, NULL, 5, NULL);
+
 
     /*
     while (1) {
@@ -93,7 +210,8 @@ void buttons_init() {
 }
 
 void button_task() {
-    const TickType_t delay = pdMS_TO_TICKS(20); // Polling alle 20ms
+    const TickType_t delay = pdMS_TO_TICKS(40); // Polling alle 20ms
+    buttons_init();
 
     while (true) {
         const int64_t now = esp_timer_get_time() / 1000; // in ms
@@ -113,6 +231,10 @@ void button_task() {
 }
 
 void button_handler_different_games(uint8_t pin) {
+    if (!menu_done) {
+        menu_handle_button(pin);
+        return;
+    }
     if (current_game == GAME_CONNECT4) {
         switch (pin) {
             case LEFT_BTN: move_left(); break;
@@ -130,75 +252,41 @@ void handle_home_button() {
     reset_game();
 }
 
-/*
+
 // === Main menu Animation ===
 
-// Gelbes Gesicht zeichnen
-static void draw_face(uint8_t r, uint8_t g, uint8_t b) {
-    for (int y = 1; y < 7; y++) {
-        for (int x = 1; x < 7; x++) {
-            if (!((x == 1 && (y == 1 || y == 6)) ||
-                  (x == 6 && (y == 1 || y == 6)))) {
-                display_set_pixel(x, y, r, g, b);
-            }
-        }
+// Smiley auf Board zeichnen
+void draw_smiley_for_level(uint8_t level) {
+    board_clear();
+
+    uint8_t eye_color = 3; // rot Augen
+    uint8_t mouth_color = level; // Mundfarbe = Level
+
+    // Augen fest auf (2,2) und (5,2)
+    board_set(2, 2, eye_color);
+    board_set(5, 2, eye_color);
+
+    // Mund: je nach Level
+    switch(level) {
+        case 1: // leicht → lächelnd
+            board_set(2, 5, mouth_color);
+            board_set(3, 6, mouth_color);
+            board_set(4, 6, mouth_color);
+            board_set(5, 5, mouth_color);
+            break;
+        case 2: // mittel → neutral
+            board_set(2, 5, mouth_color);
+            board_set(3, 5, mouth_color);
+            board_set(4, 5, mouth_color);
+            board_set(5, 5, mouth_color);
+            break;
+        case 3: // schwer → wütend
+            board_set(2, 6, mouth_color);
+            board_set(3, 5, mouth_color);
+            board_set(4, 5, mouth_color);
+            board_set(5, 6, mouth_color);
+            break;
     }
+
+    board_print(); // Konsole oder UART-Ausgabe
 }
-
-// Lächelnder Mund
-static void draw_mouth(uint8_t r, uint8_t g, uint8_t b) {
-    display_set_pixel(2, 5, r, g, b);
-    display_set_pixel(3, 6, r, g, b);
-    display_set_pixel(4, 6, r, g, b);
-    display_set_pixel(5, 5, r, g, b);
-}
-
-// Normale Augen
-static void draw_eyes_normal(uint8_t r, uint8_t g, uint8_t b) {
-    display_set_pixel(2, 2, r, g, b);
-    display_set_pixel(2, 3, r, g, b);
-    display_set_pixel(5, 2, r, g, b);
-    display_set_pixel(5, 3, r, g, b);
-}
-
-// Zwinker-Auge (rechtes Auge zu)
-static void draw_eyes_wink(uint8_t r, uint8_t g, uint8_t b) {
-    // Linkes Auge bleibt gleich
-    display_set_pixel(2, 2, r, g, b);
-    display_set_pixel(2, 3, r, g, b);
-    // Rechtes Auge zu (nur ein Strich)
-    display_set_pixel(5, 3, r, g, b);
-}
-
-void smiley_animation() {
-    const uint8_t YR = 255, YG = 255, YB = 0;   // Gelb
-    const uint8_t ER = 0,   EG = 0,   EB = 0;   // Schwarz (Augen)
-    const uint8_t MR = 255, MG = 0,   MB = 0;   // Rot (Mund)
-
-    for (uint8_t i = 0; i < 2; i++) {
-        //Normaler Smiley
-        display_clear();
-        draw_face(YR, YG, YB);
-        draw_eyes_normal(ER, EG, EB);
-        draw_mouth(MR, MG, MB);
-        display_update();
-        vTaskDelay(pdMS_TO_TICKS(1500));
-
-        //Zwinkert
-        display_clear();
-        draw_face(YR, YG, YB);
-        draw_eyes_wink(ER, EG, EB);
-        draw_mouth(MR, MG, MB);
-        display_update();
-        vTaskDelay(pdMS_TO_TICKS(400));
-
-        //wieder normal
-        display_clear();
-        draw_face(YR, YG, YB);
-        draw_eyes_normal(ER, EG, EB);
-        draw_mouth(MR, MG, MB);
-        display_update();
-        vTaskDelay(pdMS_TO_TICKS(1500));
-    }
-}
-*/

@@ -3,5 +3,5 @@
 
 void display_init();
 void sendChangesToDisplay();
-void taskDisplay();
+void display_task();
 #endif //SLP_DISPLAY_H
