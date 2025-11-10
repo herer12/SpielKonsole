@@ -47,7 +47,6 @@ void button_task();
 void handle_home_button();
 void button_handler_different_games(uint8_t pin);
 void smiley_animation();
-void draw_smiley_for_level(uint8_t level);
 
 
 
@@ -95,7 +94,6 @@ void draw_smiley_for_ai(uint8_t level) {
             break;
     }
 
-    board_print();
 }
 
 void draw_mode_selection(bool singleplayer) {
@@ -115,7 +113,6 @@ void draw_mode_selection(bool singleplayer) {
         for (int x = 2; x <= 5; x++) board_set(x, 4, color); // mittlere Querlinie
     }
 
-    board_print();
 }
 
 
@@ -124,20 +121,29 @@ void draw_mode_selection(bool singleplayer) {
 // ============================================================================
 
 void menu_handle_button(uint8_t pin) {
-    int64_t now = esp_timer_get_time()/1000; // ms
-    if(now - last_press_times[pin] < DEBOUNCE_MS) return;
-    last_press_times[pin] = now;
-
+    if (pin !=0) {
+        int64_t now = esp_timer_get_time()/1000; // ms
+        if(now - last_press_times[pin] < DEBOUNCE_MS) return;
+        last_press_times[pin] = now;
+    }
     if(menu_state == MENU_MODE){
         if(pin == LEFT_BTN || pin == RIGHT_BTN) singleplayer = !singleplayer;
-        if(pin == DOWN_BTN) menu_state = MENU_AI; // Weiter zu AI-Level
-        draw_mode_selection(singleplayer);
+        if(pin == DOWN_BTN) {
+            menu_state = MENU_AI;
+            menu_handle_button(0);
+        }else {
+            // Weiter zu AI-Level
+            draw_mode_selection(singleplayer);
+        }
     } else if(menu_state == MENU_AI){
-        if (!singleplayer)return;
+        if (!singleplayer)menu_done=true;
         if(pin == LEFT_BTN && ai_level>1) ai_level--;
         if(pin == RIGHT_BTN && ai_level<3) ai_level++;
-        if(pin == DOWN_BTN) menu_done = true; // Menü fertig
-        draw_smiley_for_ai(ai_level);
+        if(pin == DOWN_BTN) {
+            menu_done = true;
+        }else {
+            draw_smiley_for_ai(ai_level);
+        }
     }
 }
 
@@ -154,7 +160,7 @@ void menu_task(void *pvParameters){
     }
     set_Data(singleplayer,ai_level);
     board_clear();
-    ESP_LOGI(TAG,"Menü beendet. Singleplayer=%b, AI-Level=%d", singleplayer, ai_level);
+    reset_game();
     vTaskDelete(NULL);
 }
 
@@ -165,8 +171,6 @@ void menu_task(void *pvParameters){
 void app_main(void) {
 
     logic_connect4_init();
-
-    //smiley_animation();
 
     // Button-Task starten
     //17% Stack mehr als du brauchst
@@ -210,7 +214,7 @@ void buttons_init() {
 }
 
 void button_task() {
-    const TickType_t delay = pdMS_TO_TICKS(40); // Polling alle 20ms
+    const TickType_t delay = pdMS_TO_TICKS(10); // Polling alle 20ms
     buttons_init();
 
     while (true) {
@@ -229,6 +233,11 @@ void button_task() {
 
     }
 }
+void start_game() {
+    menu_done = false;
+    menu_state = MENU_MODE;
+    xTaskCreate(menu_task,"menu_task",4000,NULL,5,NULL);
+}
 
 void button_handler_different_games(uint8_t pin) {
     if (!menu_done) {
@@ -240,7 +249,7 @@ void button_handler_different_games(uint8_t pin) {
             case LEFT_BTN: move_left(); break;
             case RIGHT_BTN: move_right(); break;
             case DOWN_BTN: drop_piece(); break;
-            case UP_BTN: reset_game(); break;
+            case UP_BTN: start_game(); break;
             default: break;
         }
 
@@ -253,40 +262,3 @@ void handle_home_button() {
 }
 
 
-// === Main menu Animation ===
-
-// Smiley auf Board zeichnen
-void draw_smiley_for_level(uint8_t level) {
-    board_clear();
-
-    uint8_t eye_color = 3; // rot Augen
-    uint8_t mouth_color = level; // Mundfarbe = Level
-
-    // Augen fest auf (2,2) und (5,2)
-    board_set(2, 2, eye_color);
-    board_set(5, 2, eye_color);
-
-    // Mund: je nach Level
-    switch(level) {
-        case 1: // leicht → lächelnd
-            board_set(2, 5, mouth_color);
-            board_set(3, 6, mouth_color);
-            board_set(4, 6, mouth_color);
-            board_set(5, 5, mouth_color);
-            break;
-        case 2: // mittel → neutral
-            board_set(2, 5, mouth_color);
-            board_set(3, 5, mouth_color);
-            board_set(4, 5, mouth_color);
-            board_set(5, 5, mouth_color);
-            break;
-        case 3: // schwer → wütend
-            board_set(2, 6, mouth_color);
-            board_set(3, 5, mouth_color);
-            board_set(4, 5, mouth_color);
-            board_set(5, 6, mouth_color);
-            break;
-    }
-
-    board_print(); // Konsole oder UART-Ausgabe
-}

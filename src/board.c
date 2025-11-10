@@ -50,13 +50,3 @@ uint8_t* get_Board(void) {
     return board;
 }
 
-//Nachdem der Code funktioniert löschen
-// Gibt Brett im Terminal aus (Debug)
-void board_print() {
-    for (uint8_t y = 0; y < BOARD_SIZE; y++) {
-        for (uint8_t x = 0; x < BOARD_SIZE; x++) {
-            printf("%d ", board_get( x, y));
-        }
-        printf("\n");
-    }
-}

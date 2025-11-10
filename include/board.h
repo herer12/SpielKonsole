@@ -19,8 +19,6 @@ uint8_t board_get( int x, int y);
 // Setzt das gesamte Brett auf 0
 void board_clear();
 
-// Gibt das Brett in der Konsole aus (nur zum Debuggen)
-void board_print();
 
 uint8_t* get_Board();
 

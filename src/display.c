@@ -26,18 +26,16 @@ void display_init() {
     uart_set_pin(UART_PORT, TX_PIN, RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 }
 void sendChangesToDisplay() {
-    ESP_LOGI(TAG, "Size of Board: %zu", sizeof(board));
-    ESP_LOGI(TAG, "Sending changes to display");
-    int bytes = uart_write_bytes(UART_PORT, (const char*)board, BOARD_BYTES);
-    ESP_LOGI(TAG, "Sent %d bytes over UART", bytes);
+    uint8_t startByte = 0xAA; // Startzeichen
+    uart_write_bytes(UART_PORT, (const char*)&startByte, 1);
+    uart_write_bytes(UART_PORT, (const char*)board, BOARD_BYTES);
 }
 
 void display_task() {
-    const TickType_t delay = pdMS_TO_TICKS(1000); // Polling alle 20ms
+    const TickType_t delay = pdMS_TO_TICKS(20); // Polling alle 20ms
     display_init();
 
     while (true) {
-
         sendChangesToDisplay();
 
         vTaskDelay(delay);

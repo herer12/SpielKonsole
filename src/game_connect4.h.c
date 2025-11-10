@@ -17,6 +17,7 @@ uint8_t ai_level= 1 ; //1 leicht, 2 Forgeschritten 3 Schwer(perfektes Spiel)
 bool game_over = false;
 uint8_t col = 3;
 uint8_t player = 1;
+void ai_move_task(void *pvParameters);
 void set_Data(bool singleplayerMode, uint8_t kiLevel) {
     if (!singleplayerMode) {
         singleplayer = false;
@@ -39,60 +40,80 @@ void logic_connect4_init() {
 // ------------------------------------------------------------
 void move_left() {
     if (game_over) return;
-    board_set(col, 0, 0);
-    if (col > 0) col--;
+    if (singleplayer&&player==2) {
+
+    }else {
+        board_set(col, 0, 0);
+    }
+    if (col > 0) {
+        col--;
+    } else {
+        col = COLS - 1;
+    }
     board_set(col, 0, player);
-    board_print();
 }
 
 void move_right() {
     if (game_over) return;
-    board_set(col, 0, 0);
-    if (col < COLS - 1) col++;
+    if (singleplayer&&player==2) {
+
+    }else {
+        board_set(col, 0, 0);
+    }
+    if (col < COLS - 1) {
+        col++;
+    } else {
+        col = 0;
+    }
     board_set(col, 0, player);
-    board_print();
 }
 
 void drop_piece() {
     if (game_over) return;
 
     if (!drop_piece_in_col(col)) {
-        ESP_LOGI(TAG, "Spalte %d ist voll", col);
         return;
     }
 
     if (check_win_for_player(player)) {
-        ESP_LOGI(TAG, "Player %d gewinnt!", player);
         game_over = true;
         reset_game();
         return;
     }
 
     if (singleplayer) {
-        // KI-Zug
+        // KI-Zug wird als eigener Task gestartet
         player = 2;
-        int ai_col = ai_choose_column();
-        ESP_LOGI(TAG, "KI (Level %d) wählt Spalte %d", ai_level, ai_col);
-        vTaskDelay(pdMS_TO_TICKS(300));
-        drop_piece_in_col(ai_col);
+        board_set(col, 0, 0); // Anzeige löschen
 
-        if (check_win_for_player(player)) {
-            ESP_LOGI(TAG, "KI (Player %d) gewinnt!", player);
-            game_over = true;
-            return;
+        BaseType_t res = xTaskCreate(
+            ai_move_task,     // Funktion
+            "ai_move_task",   // Taskname
+            8192,             // Stackgröße (bei Bedarf größer)
+            NULL,             // Parameter
+            4,                // Priorität (niedriger als Display!)
+            NULL
+        );
+
+        if (res != pdPASS) {
+            ESP_LOGE(TAG, "AI-Task konnte nicht erstellt werden! Fallback: synchron");
+            int ai_col = ai_choose_column();
+            vTaskDelay(pdMS_TO_TICKS(300));
+            drop_piece_in_col(ai_col);
+            if (check_win_for_player(2)) game_over = true;
+            player = 1;
+            col = 3;
         }
 
-        player = 1;
-        col = 3;
     } else {
         // Multiplayer
         player = (player == 1) ? 2 : 1;
         col = 3;
-
+        board_set(col, 0, player);
     }
+
     board_set(col, 0, player);
 
-    board_print();
 }
 
 // ------------------------------------------------------------
@@ -104,17 +125,17 @@ void reset_game() {
     col = 3;
     game_over = false;
     board_set(col, 0, player);
-    ESP_LOGI(TAG, "Spiel zurückgesetzt");
 }
+
 
 // ------------------------------------------------------------
 // Hilfsfunktionen
 // ------------------------------------------------------------
 bool drop_piece_in_col(uint8_t c) {
-    for (int y = ROWS - 1; y >= 1; y--) { // y=6..1, NICHT 0
+    for (int y = ROWS - 1; y >= 1; y--) { // y = 6..1
         if (board_get(c, y) == 0) {
             board_set(c, y, player);
-            board_set(col, 0, 0); // Anzeige löschen
+            board_set(c, 0, 0); // Anzeige in SPALTE c löschen (NICHT global col)
             return true;
         }
     }
@@ -280,4 +301,35 @@ int ai_choose_column() {
 
     ESP_LOGI(TAG, "KI (AlphaBeta, Level %d) wählt Spalte %d mit Score %d", ai_level, bestCol, bestScore);
     return bestCol;
+}
+
+
+void ai_move_task(void *pvParameters) {
+    (void) pvParameters;
+
+    // kleine Pause, um Display weiterlaufen zu lassen
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    // KI-Spalte berechnen
+    int ai_col = ai_choose_column();
+
+    // kurze Wartezeit zur "Animation"
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    // Zug durchführen
+    if (!drop_piece_in_col(ai_col)) {
+        ESP_LOGW("AI", "Spalte %d ist voll!", ai_col);
+    } else if (check_win_for_player(2)) {
+        game_over = true;
+        ESP_LOGI("AI", "KI gewinnt!");
+        // Optional: reset_game();
+    }
+
+    // Spieler zurücksetzen
+    player = 1;
+    col = 3;
+    board_set(col, 0, player);
+
+    // Task beenden
+    vTaskDelete(NULL);
 }
